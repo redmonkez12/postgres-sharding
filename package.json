@@ -1,0 +1,27 @@
+{
+  "name": "sharding-postgres",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.11",
+  "description": "TypeScript playground for raw-SQL PostgreSQL experiments.",
+  "scripts": {
+    "seed": "tsx scripts/seed.ts",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "explain": "tsx scripts/explain.ts",
+    "stats": "tsx scripts/stats.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^10.1.0",
+    "@types/node": "^24.7.2",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
