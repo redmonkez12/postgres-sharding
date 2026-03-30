@@ -21,6 +21,7 @@
     "cross-shard-query": "tsx scripts/cross-shard-query.ts",
     "shard-stats": "tsx scripts/shard-stats.ts",
     "cache-demo": "tsx scripts/cache-demo.ts",
+    "rate-limit-bench": "tsx scripts/rate-limiter-benchmark.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },
