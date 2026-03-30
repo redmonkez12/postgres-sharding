@@ -13,6 +13,7 @@
     "monitor-lag": "tsx scripts/monitor-lag.ts",
     "rw-split-demo": "tsx scripts/rw-split-demo.ts",
     "logical-demo": "tsx scripts/logical-replication-demo.ts",
+    "failover-test": "tsx scripts/failover-test.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },

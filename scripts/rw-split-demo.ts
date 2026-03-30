@@ -188,22 +188,41 @@ async function benchmarkDemo(concurrency: number, durationSec: number): Promise<
     durationSec,
   );
 
-  // Split: reads go to replica via query(..., { readonly: true })
-  const split = await runBenchmark(
-    "Read/write split",
-    async () => {
-      await getReplicaPool().query(readSql);
-    },
-    concurrency,
-    durationSec,
-  );
+  // Check if replica can serve the benchmark query before starting
+  let replicaAvailable = false;
+  try {
+    await getReplicaPool().query("SELECT 1 FROM orders LIMIT 1");
+    replicaAvailable = true;
+  } catch {
+    // replica missing schema or unreachable
+  }
 
-  printResults([allOnPrimary, split]);
+  const results: BenchmarkResult[] = [allOnPrimary];
 
-  const improvement = ((split.qps - allOnPrimary.qps) / allOnPrimary.qps) * 100;
-  console.log(
-    `\n  Throughput delta: ${improvement >= 0 ? "+" : ""}${improvement.toFixed(1)}% with read/write split`,
-  );
+  if (replicaAvailable) {
+    // Split: reads go to replica via query(..., { readonly: true })
+    const split = await runBenchmark(
+      "Read/write split",
+      async () => {
+        await getReplicaPool().query(readSql);
+      },
+      concurrency,
+      durationSec,
+    );
+    results.push(split);
+  } else {
+    console.log("  ⚠️  Replica unavailable — skipping read/write split benchmark");
+    console.log("     Ensure streaming replication is running and schema is replicated\n");
+  }
+
+  printResults(results);
+
+  if (results.length === 2) {
+    const improvement = ((results[1].qps - allOnPrimary.qps) / allOnPrimary.qps) * 100;
+    console.log(
+      `\n  Throughput delta: ${improvement >= 0 ? "+" : ""}${improvement.toFixed(1)}% with read/write split`,
+    );
+  }
 }
 
 // ── Main ────────────────────────────────────────────────────────────
