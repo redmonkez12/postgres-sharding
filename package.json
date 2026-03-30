@@ -15,6 +15,7 @@
     "logical-demo": "tsx scripts/logical-replication-demo.ts",
     "failover-test": "tsx scripts/failover-test.ts",
     "partition-stats": "tsx scripts/partition-stats.ts",
+    "partition-benchmark": "tsx scripts/partition-benchmark.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },
