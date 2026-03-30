@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS customers (
+  id UUID PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  region TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS categories (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS products (
+  id UUID PRIMARY KEY,
+  name TEXT NOT NULL,
+  sku TEXT NOT NULL UNIQUE,
+  price_cents INTEGER NOT NULL,
+  category_id INTEGER NOT NULL REFERENCES categories (id),
+  stock_qty INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id UUID PRIMARY KEY,
+  customer_id UUID NOT NULL REFERENCES customers (id),
+  status TEXT NOT NULL,
+  total_cents INTEGER NOT NULL,
+  region TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id UUID PRIMARY KEY,
+  order_id UUID NOT NULL REFERENCES orders (id),
+  product_id UUID NOT NULL REFERENCES products (id),
+  quantity INTEGER NOT NULL,
+  unit_price_cents INTEGER NOT NULL
+);
