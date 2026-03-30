@@ -10,6 +10,7 @@
     "benchmark": "tsx scripts/benchmark.ts",
     "explain": "tsx scripts/explain.ts",
     "stats": "tsx scripts/stats.ts",
+    "monitor-lag": "tsx scripts/monitor-lag.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },
