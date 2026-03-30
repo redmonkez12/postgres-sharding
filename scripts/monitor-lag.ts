@@ -32,6 +32,15 @@ function createPool(port: number): Pool {
   });
 }
 
+async function isPoolReachable(pool: Pool): Promise<boolean> {
+  try {
+    await pool.query("SELECT 1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Queries ──────────────────────────────────────────────────────────
 
 interface PrimaryReplicationRow extends QueryResultRow {
@@ -51,6 +60,19 @@ interface ReplicaLsnRow extends QueryResultRow {
   replay_lsn: string | null;
   receive_replay_diff: string | null;
   is_in_recovery: boolean;
+}
+
+interface LogicalSubRow extends QueryResultRow {
+  subname: string;
+  received_lsn: string | null;
+  latest_end_lsn: string | null;
+  last_msg_send_time: string | null;
+  last_msg_receipt_time: string | null;
+}
+
+interface LogicalTableRow extends QueryResultRow {
+  relname: string;
+  row_count: string;
 }
 
 async function queryPrimary(pool: Pool): Promise<PrimaryReplicationRow[]> {
@@ -90,6 +112,32 @@ async function queryReplica(pool: Pool): Promise<ReplicaLsnRow> {
   return result.rows[0];
 }
 
+async function queryLogicalSub(pool: Pool): Promise<LogicalSubRow[]> {
+  const result = await pool.query<LogicalSubRow>(`
+    SELECT
+      s.subname,
+      st.received_lsn::text,
+      st.latest_end_lsn::text,
+      st.last_msg_send_time::text,
+      st.last_msg_receipt_time::text
+    FROM pg_subscription s
+    JOIN pg_stat_subscription st ON st.subid = s.oid
+    WHERE st.relid IS NULL
+    ORDER BY s.subname
+  `);
+  return result.rows;
+}
+
+async function queryLogicalTables(pool: Pool): Promise<LogicalTableRow[]> {
+  const result = await pool.query<LogicalTableRow>(`
+    SELECT relname, n_live_tup::text AS row_count
+    FROM pg_stat_user_tables
+    WHERE relname IN ('orders', 'order_items')
+    ORDER BY relname
+  `);
+  return result.rows;
+}
+
 // ── Formatting helpers ───────────────────────────────────────────────
 
 function formatBytes(bytes: string | null): string {
@@ -113,7 +161,9 @@ function rcol(text: string, width: number): string {
 
 function render(
   primaryRows: PrimaryReplicationRow[],
-  replicaRow: ReplicaLsnRow,
+  replicaRow: ReplicaLsnRow | null,
+  logicalSubs: LogicalSubRow[] | null,
+  logicalTables: LogicalTableRow[] | null,
 ): void {
   // Clear screen and move cursor to top
   process.stdout.write("\x1B[2J\x1B[H");
@@ -156,14 +206,45 @@ function render(
     console.log();
   }
 
-  // ── Replica: WAL positions ──
-  console.log("═══ Replica: WAL positions ═══\n");
-  console.log(`  In recovery:         ${replicaRow.is_in_recovery}`);
-  console.log(`  Receive LSN:         ${replicaRow.receive_lsn ?? "-"}`);
-  console.log(`  Replay  LSN:         ${replicaRow.replay_lsn ?? "-"}`);
-  console.log(`  Receive→Replay diff: ${formatBytes(replicaRow.receive_replay_diff)}`);
+  // ── Streaming replica: WAL positions ──
+  if (replicaRow) {
+    console.log("═══ Streaming Replica (port 5433): WAL positions ═══\n");
+    console.log(`  In recovery:         ${replicaRow.is_in_recovery}`);
+    console.log(`  Receive LSN:         ${replicaRow.receive_lsn ?? "-"}`);
+    console.log(`  Replay  LSN:         ${replicaRow.replay_lsn ?? "-"}`);
+    console.log(`  Receive→Replay diff: ${formatBytes(replicaRow.receive_replay_diff)}`);
+    console.log();
+  }
 
-  console.log("\n(Ctrl+C to stop)");
+  // ── Logical replica: subscription status ──
+  if (logicalSubs) {
+    console.log("═══ Logical Replica (port 5434): Subscription status ═══\n");
+
+    if (logicalSubs.length === 0) {
+      console.log("  No active subscriptions\n");
+    } else {
+      for (const sub of logicalSubs) {
+        console.log(`  Subscription:        ${sub.subname}`);
+        console.log(`  Received LSN:        ${sub.received_lsn ?? "-"}`);
+        console.log(`  Latest end LSN:      ${sub.latest_end_lsn ?? "-"}`);
+        console.log(`  Last msg sent:       ${sub.last_msg_send_time ?? "-"}`);
+        console.log(`  Last msg received:   ${sub.last_msg_receipt_time ?? "-"}`);
+      }
+      console.log();
+    }
+
+    if (logicalTables && logicalTables.length > 0) {
+      console.log("  Replicated table row counts:");
+      for (const t of logicalTables) {
+        console.log(`    ${col(t.relname, 20)} ${rcol(t.row_count, 10)} rows`);
+      }
+      console.log();
+    }
+  } else {
+    console.log("═══ Logical Replica (port 5434): not connected ═══\n");
+  }
+
+  console.log("(Ctrl+C to stop)");
 }
 
 // ── Main loop ────────────────────────────────────────────────────────
@@ -174,18 +255,44 @@ async function main(): Promise<void> {
   const primaryPool = createPool(
     Number(process.env.PRIMARY_PORT ?? 5432),
   );
-  const replicaPool = createPool(
+  const streamingPool = createPool(
     Number(process.env.REPLICA_PORT ?? 5433),
   );
+  const logicalPool = createPool(
+    Number(process.env.LOGICAL_PORT ?? 5434),
+  );
 
-  logger.info("Starting replica lag monitor", { intervalMs: interval });
+  const streamingUp = await isPoolReachable(streamingPool);
+  const logicalUp = await isPoolReachable(logicalPool);
+
+  logger.info("Starting replica lag monitor", {
+    intervalMs: interval,
+    streaming: streamingUp,
+    logical: logicalUp,
+  });
 
   const tick = async (): Promise<void> => {
-    const [primaryRows, replicaRow] = await Promise.all([
+    const promises: [
+      Promise<PrimaryReplicationRow[]>,
+      Promise<ReplicaLsnRow | null>,
+      Promise<LogicalSubRow[] | null>,
+      Promise<LogicalTableRow[] | null>,
+    ] = [
       queryPrimary(primaryPool),
-      queryReplica(replicaPool),
-    ]);
-    render(primaryRows, replicaRow);
+      streamingUp
+        ? queryReplica(streamingPool)
+        : Promise.resolve(null),
+      logicalUp
+        ? queryLogicalSub(logicalPool)
+        : Promise.resolve(null),
+      logicalUp
+        ? queryLogicalTables(logicalPool)
+        : Promise.resolve(null),
+    ];
+
+    const [primaryRows, replicaRow, logicalSubs, logicalTables] =
+      await Promise.all(promises);
+    render(primaryRows, replicaRow, logicalSubs, logicalTables);
   };
 
   // Initial render
@@ -202,7 +309,11 @@ async function main(): Promise<void> {
   // Graceful shutdown
   const shutdown = async (): Promise<void> => {
     clearInterval(timer);
-    await Promise.all([primaryPool.end(), replicaPool.end()]);
+    await Promise.all([
+      primaryPool.end(),
+      streamingPool.end(),
+      logicalPool.end(),
+    ]);
     process.exit(0);
   };
 

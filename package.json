@@ -11,6 +11,8 @@
     "explain": "tsx scripts/explain.ts",
     "stats": "tsx scripts/stats.ts",
     "monitor-lag": "tsx scripts/monitor-lag.ts",
+    "rw-split-demo": "tsx scripts/rw-split-demo.ts",
+    "logical-demo": "tsx scripts/logical-replication-demo.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },

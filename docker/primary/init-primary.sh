@@ -4,4 +4,7 @@ set -e
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
     CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD 'replicator';
     SELECT pg_create_physical_replication_slot('replica_streaming_slot');
+
+    -- Logical replication: publish only orders + order_items
+    CREATE PUBLICATION orders_pub FOR TABLE orders, order_items;
 EOSQL

@@ -21,5 +21,28 @@ services:
     networks:
       - pgnet
 
+  pg-replica-logical:
+    image: postgres:18.3-alpine
+    restart: unless-stopped
+    entrypoint: ["bash", "/etc/postgresql/init-logical.sh"]
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - pglogicaldata:/var/lib/postgresql/data
+      - ./docker/replica-logical/init-logical.sh:/etc/postgresql/init-logical.sh:ro
+      - ./docker/replica-logical/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pgnet
+    profiles:
+      - logical
+
 volumes:
   pgreplicadata:
+  pglogicaldata:
