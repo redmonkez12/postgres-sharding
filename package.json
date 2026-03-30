@@ -17,6 +17,7 @@
     "partition-stats": "tsx scripts/partition-stats.ts",
     "partition-benchmark": "tsx scripts/partition-benchmark.ts",
     "shard-seed": "tsx scripts/shard-seed.ts",
+    "shard-router-demo": "tsx scripts/shard-router-demo.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },
