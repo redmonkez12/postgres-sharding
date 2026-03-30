@@ -20,15 +20,18 @@
     "shard-router-demo": "tsx scripts/shard-router-demo.ts",
     "cross-shard-query": "tsx scripts/cross-shard-query.ts",
     "shard-stats": "tsx scripts/shard-stats.ts",
+    "cache-demo": "tsx scripts/cache-demo.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
+    "ioredis": "^5.10.1",
     "pg": "^8.16.3"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.1.0",
+    "@types/ioredis": "^5.0.0",
     "@types/node": "^24.7.2",
     "@types/pg": "^8.20.0",
     "tsx": "^4.20.6",
