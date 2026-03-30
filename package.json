@@ -16,6 +16,7 @@
     "failover-test": "tsx scripts/failover-test.ts",
     "partition-stats": "tsx scripts/partition-stats.ts",
     "partition-benchmark": "tsx scripts/partition-benchmark.ts",
+    "shard-seed": "tsx scripts/shard-seed.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },
