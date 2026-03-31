@@ -3,6 +3,7 @@ import {
   BASE_URL,
   HEADERS,
   defaultThresholds,
+  ensureCategories,
   randomCustomer,
   randomProduct,
   randomOrderFor,
@@ -43,6 +44,9 @@ const state = {
 };
 
 export function setup() {
+  // Seed categories so product inserts satisfy the foreign key
+  ensureCategories();
+
   // Seed a few records so reads have data to hit
   const customers = [];
   const products = [];

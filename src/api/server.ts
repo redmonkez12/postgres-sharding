@@ -7,6 +7,7 @@ import { closePools } from "../db/read-write-split.js";
 import { productRoutes } from "./routes/products.js";
 import { customerRoutes } from "./routes/customers.js";
 import { orderRoutes } from "./routes/orders.js";
+import { categoryRoutes } from "./routes/categories.js";
 
 // ── Server ─────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ app.get("/health", async () => ({ status: "ok" }));
 
 // ── Routes ─────────────────────────────────────────────────────────
 
+app.register(categoryRoutes, { prefix: "/categories" });
 app.register(productRoutes, { prefix: "/products" });
 app.register(customerRoutes, { prefix: "/customers" });
 app.register(orderRoutes, { prefix: "/orders" });

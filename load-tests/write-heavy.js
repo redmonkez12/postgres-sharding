@@ -1,6 +1,7 @@
 import { sleep } from "k6";
 import {
   defaultThresholds,
+  ensureCategories,
   randomCustomer,
   randomProduct,
   randomOrderFor,
@@ -36,6 +37,8 @@ export const options = {
 };
 
 export function setup() {
+  ensureCategories();
+
   const customers = [];
   const products = [];
 

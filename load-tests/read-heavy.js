@@ -1,6 +1,7 @@
 import { sleep } from "k6";
 import {
   defaultThresholds,
+  ensureCategories,
   randomCustomer,
   randomProduct,
   listProducts,
@@ -36,6 +37,8 @@ export const options = {
 };
 
 export function setup() {
+  ensureCategories();
+
   // Pre-seed data so reads always have something to hit
   const customers = [];
   const products = [];

@@ -2,6 +2,7 @@ import { check, sleep } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
 import {
   HEADERS,
+  ensureCategories,
   listProducts,
   getProduct,
   createProduct,
@@ -59,6 +60,8 @@ export const options = {
 };
 
 export function setup() {
+  ensureCategories();
+
   // Seed a few products for reads
   const products = [];
   for (let i = 0; i < 5; i++) {

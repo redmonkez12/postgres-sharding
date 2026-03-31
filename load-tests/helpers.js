@@ -13,7 +13,9 @@ export const HEADERS = {
 let counter = 0;
 
 function uid() {
-  return `${__VU}-${__ITER}-${++counter}-${Date.now()}`;
+  const vu = typeof __VU !== "undefined" ? __VU : 0;
+  const iter = typeof __ITER !== "undefined" ? __ITER : 0;
+  return `${vu}-${iter}-${++counter}-${Date.now()}`;
 }
 
 export function randomCustomer() {
@@ -57,6 +59,17 @@ export function randomOrderFor(customerId, productIds) {
     region: randomRegion(),
     items,
   };
+}
+
+// ── Category seeding ───────────────────────────────────────────────
+
+export function ensureCategories() {
+  const names = ["Electronics", "Books", "Clothing", "Home", "Sports"];
+  for (const name of names) {
+    http.post(`${BASE_URL}/categories`, JSON.stringify({ name }), {
+      headers: HEADERS,
+    });
+  }
 }
 
 // ── API helpers ─────────────────────────────────────────────────────
