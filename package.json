@@ -27,6 +27,7 @@
     "job-queue-demo": "tsx scripts/job-queue-demo.ts",
     "job-worker": "tsx src/jobs/order-confirmation.worker.ts",
     "dev:api": "tsx src/api/server.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },
