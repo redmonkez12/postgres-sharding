@@ -1,26 +1,5 @@
 import { describe, expect, test, beforeEach, mock } from "bun:test";
-
-// ── Mock pg pools ────────────────────────────────────────────────
-
-type MockPool = {
-  query: ReturnType<typeof mock>;
-  end: ReturnType<typeof mock>;
-};
-
-const createdPools: Array<{ connectionString: string; pool: MockPool }> = [];
-
-mock.module("pg", () => ({
-  Pool: class FakePool {
-    query: ReturnType<typeof mock>;
-    end: ReturnType<typeof mock>;
-
-    constructor(opts: { connectionString: string }) {
-      this.query = mock(async () => ({ rows: [], rowCount: 0 }));
-      this.end = mock(async () => {});
-      createdPools.push({ connectionString: opts.connectionString, pool: this });
-    }
-  },
-}));
+import { mockPgPools, type MockPool } from "../helpers/mock-pg.js";
 
 mock.module("../../src/utils/logger.js", () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {} },
@@ -50,7 +29,7 @@ describe("ShardRouter", () => {
   let router: InstanceType<typeof ShardRouter>;
 
   beforeEach(() => {
-    createdPools.length = 0;
+    mockPgPools.length = 0;
     router = new ShardRouter(CONFIGS);
   });
 
@@ -59,11 +38,11 @@ describe("ShardRouter", () => {
   describe("constructor", () => {
     test("creates a pool per region", () => {
       expect(router.regions).toEqual(["eu", "us", "ap"]);
-      expect(createdPools).toHaveLength(3);
+      expect(mockPgPools).toHaveLength(3);
     });
 
     test("uses supplied connection strings", () => {
-      const urls = createdPools.map((p) => p.connectionString);
+      const urls = mockPgPools.map((p) => p.config.connectionString);
       expect(urls).toEqual(["postgresql://eu", "postgresql://us", "postgresql://ap"]);
     });
   });

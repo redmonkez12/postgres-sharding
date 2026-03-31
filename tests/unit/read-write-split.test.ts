@@ -1,32 +1,5 @@
 import { describe, expect, test, beforeEach, mock } from "bun:test";
-
-// ── Mock pg pools ────────────────────────────────────────────────
-
-type MockPool = {
-  query: ReturnType<typeof mock>;
-  end: ReturnType<typeof mock>;
-  connect: ReturnType<typeof mock>;
-};
-
-const createdPools: Array<{ config: any; pool: MockPool }> = [];
-
-mock.module("pg", () => ({
-  Pool: class FakePool {
-    query: ReturnType<typeof mock>;
-    end: ReturnType<typeof mock>;
-    connect: ReturnType<typeof mock>;
-
-    constructor(config: any) {
-      this.query = mock(async () => ({ rows: [], rowCount: 0 }));
-      this.end = mock(async () => {});
-      this.connect = mock(async () => ({
-        query: mock(async () => ({ rows: [], rowCount: 0 })),
-        release: mock(() => {}),
-      }));
-      createdPools.push({ config, pool: this });
-    }
-  },
-}));
+import { mockPgPools, type MockPool } from "../helpers/mock-pg.js";
 
 mock.module("../../src/utils/logger.js", () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {} },
@@ -48,11 +21,11 @@ const {
 // ── Helpers ──────────────────────────────────────────────────────
 
 function findPoolByPort(port: number): MockPool | undefined {
-  return createdPools.find((p) => p.config.port === port)?.pool;
+  return mockPgPools.find((p) => p.config.port === port)?.pool;
 }
 
 function findConfigByPort(port: number) {
-  return createdPools.find((p) => p.config.port === port)?.config;
+  return mockPgPools.find((p) => p.config.port === port)?.config;
 }
 
 // ── Tests ────────────────────────────────────────────────────────
@@ -60,7 +33,7 @@ function findConfigByPort(port: number) {
 describe("read-write-split", () => {
   beforeEach(async () => {
     await closePools();
-    createdPools.length = 0;
+    mockPgPools.length = 0;
   });
 
   // ── Query routing ─────────────────────────────────────────────
@@ -248,13 +221,13 @@ describe("read-write-split", () => {
     test("creates fresh pools after close", async () => {
       getPrimaryPool();
       getReplicaPool();
-      expect(createdPools).toHaveLength(2);
+      expect(mockPgPools).toHaveLength(2);
 
       await closePools();
-      createdPools.length = 0;
+      mockPgPools.length = 0;
 
       await query("SELECT 1");
-      expect(createdPools).toHaveLength(1);
+      expect(mockPgPools).toHaveLength(1);
     });
 
     test("resets replica down flag", async () => {
@@ -265,7 +238,7 @@ describe("read-write-split", () => {
       await query("SELECT 1", [], { readonly: true });
 
       await closePools();
-      createdPools.length = 0;
+      mockPgPools.length = 0;
 
       // After close, replica should be tried again
       await query("SELECT 2", [], { readonly: true });
