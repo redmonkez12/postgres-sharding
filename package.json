@@ -27,6 +27,10 @@
     "job-queue-demo": "tsx scripts/job-queue-demo.ts",
     "job-worker": "tsx src/jobs/order-confirmation.worker.ts",
     "dev:api": "tsx src/api/server.ts",
+    "load-test": "k6 run load-tests/baseline.js",
+    "load-test:read-heavy": "k6 run load-tests/read-heavy.js",
+    "load-test:write-heavy": "k6 run load-tests/write-heavy.js",
+    "load-test:rate-limit": "k6 run load-tests/rate-limit-stress.js",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
