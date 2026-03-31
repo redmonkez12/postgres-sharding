@@ -21,6 +21,8 @@
     "cross-shard-query": "tsx scripts/cross-shard-query.ts",
     "shard-stats": "tsx scripts/shard-stats.ts",
     "cache-demo": "tsx scripts/cache-demo.ts",
+    "cache-benchmark": "tsx scripts/cache-benchmark.ts",
+    "cache-invalidation-test": "tsx scripts/cache-invalidation-test.ts",
     "rate-limit-bench": "tsx scripts/rate-limiter-benchmark.ts",
     "job-queue-demo": "tsx scripts/job-queue-demo.ts",
     "job-worker": "tsx src/jobs/order-confirmation.worker.ts",
