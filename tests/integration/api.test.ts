@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, beforeAll, afterAll, mock } from "bun:test";
+import { mockPgPools, type MockPool } from "../helpers/mock-pg.js";
 
 // ── In-memory Redis stores (for rate limiter) ─────────────────────
 const sortedSets = new Map<string, Map<string, number>>();
@@ -73,34 +74,15 @@ mock.module("ioredis", () => ({
   },
 }));
 
-// ── Mock database layer ───────────────────────────────────────────
+// ── Query tracking ───────────────────────────────────────────────
 
-type QueryCall = { sql: string; params: unknown[]; opts?: { readonly?: boolean } };
+type QueryCall = { sql: string; params: unknown[]; pool: "primary" | "replica" };
 
 let queryCalls: QueryCall[] = [];
-let transactionCalls: QueryCall[] = [];
+let transactionCalls: { sql: string; params: unknown[] }[] = [];
 let queryResponder: (sql: string, params: unknown[]) => { rows: unknown[]; rowCount: number };
-
-const mockQuery = mock(async (sql: string, params: unknown[] = [], opts: any = {}) => {
-  queryCalls.push({ sql, params, opts });
-  return queryResponder(sql, params);
-});
-
-const mockWithPrimaryClient = mock(async (callback: any) => {
-  const client = {
-    query: mock(async (sql: string, params?: unknown[]) => {
-      transactionCalls.push({ sql, params: params ?? [] });
-      return queryResponder(sql, params ?? []);
-    }),
-  };
-  return callback(client);
-});
-
-mock.module("../../src/db/read-write-split.js", () => ({
-  query: mockQuery,
-  withPrimaryClient: mockWithPrimaryClient,
-  closePools: mock(async () => {}),
-}));
+let primaryMock: MockPool;
+let replicaMock: MockPool;
 
 mock.module("../../src/utils/logger.js", () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {} },
@@ -112,6 +94,7 @@ mock.module("dotenv/config", () => ({}));
 
 import Fastify, { type FastifyInstance } from "fastify";
 
+const { closePools, getPrimaryPool, getReplicaPool } = await import("../../src/db/read-write-split.js");
 const { productRoutes } = await import("../../src/api/routes/products.js");
 const { customerRoutes } = await import("../../src/api/routes/customers.js");
 const { orderRoutes } = await import("../../src/api/routes/orders.js");
@@ -153,12 +136,33 @@ afterAll(async () => {
   await app.close();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await closePools();
+  mockPgPools.length = 0;
   queryCalls = [];
   transactionCalls = [];
-  mockQuery.mockClear();
-  mockWithPrimaryClient.mockClear();
   queryResponder = () => ({ rows: [], rowCount: 0 });
+
+  // Pre-create both pools so route queries hit our configured mocks
+  getPrimaryPool();
+  getReplicaPool();
+  primaryMock = mockPgPools.find((p) => p.config.port === 5432)!.pool;
+  replicaMock = mockPgPools.find((p) => p.config.port === 5433)!.pool;
+
+  for (const { config, pool } of mockPgPools) {
+    const poolType: "primary" | "replica" = config.port === 5433 ? "replica" : "primary";
+    pool.query.mockImplementation(async (sql: string, params: unknown[]) => {
+      queryCalls.push({ sql, params: params ?? [], pool: poolType });
+      return queryResponder(sql, params ?? []);
+    });
+    pool.connect.mockImplementation(async () => ({
+      query: mock(async (sql: string, params?: unknown[]) => {
+        transactionCalls.push({ sql, params: params ?? [] });
+        return queryResponder(sql, params ?? []);
+      }),
+      release: mock(() => {}),
+    }));
+  }
 });
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -230,7 +234,7 @@ describe("Products CRUD", () => {
 
     const insertCall = queryCalls.find((c) => c.sql.includes("INSERT INTO products"));
     expect(insertCall).toBeDefined();
-    expect(insertCall!.opts?.readonly).toBeUndefined();
+    expect(insertCall!.pool).toBe("primary");
   });
 
   test("GET /products — lists products (readonly)", async () => {
@@ -245,7 +249,7 @@ describe("Products CRUD", () => {
     expect(res.json()).toEqual([PRODUCT]);
 
     const selectCall = queryCalls.find((c) => c.sql.includes("SELECT * FROM products ORDER BY"));
-    expect(selectCall!.opts).toEqual({ readonly: true });
+    expect(selectCall!.pool).toBe("replica");
   });
 
   test("GET /products/:id — returns single product (readonly)", async () => {
@@ -260,7 +264,7 @@ describe("Products CRUD", () => {
     expect(res.json()).toMatchObject({ id: "prod-001" });
 
     const selectCall = queryCalls.find((c) => c.sql.includes("WHERE id = $1"));
-    expect(selectCall!.opts).toEqual({ readonly: true });
+    expect(selectCall!.pool).toBe("replica");
   });
 
   test("GET /products/:id — 404 when not found", async () => {
@@ -291,7 +295,7 @@ describe("Products CRUD", () => {
 
     const updateCall = queryCalls.find((c) => c.sql.includes("UPDATE products SET"));
     expect(updateCall).toBeDefined();
-    expect(updateCall!.opts?.readonly).toBeUndefined();
+    expect(updateCall!.pool).toBe("primary");
   });
 
   test("PATCH /products/:id — 404 when not found", async () => {
@@ -332,7 +336,7 @@ describe("Products CRUD", () => {
 
     const deleteCall = queryCalls.find((c) => c.sql.includes("DELETE FROM products"));
     expect(deleteCall).toBeDefined();
-    expect(deleteCall!.opts?.readonly).toBeUndefined();
+    expect(deleteCall!.pool).toBe("primary");
   });
 
   test("DELETE /products/:id — 404 when not found", async () => {
@@ -377,7 +381,7 @@ describe("Customers CRUD", () => {
     expect(res.json()).toEqual([CUSTOMER]);
 
     const call = queryCalls.find((c) => c.sql.includes("SELECT * FROM customers ORDER BY"));
-    expect(call!.opts).toEqual({ readonly: true });
+    expect(call!.pool).toBe("replica");
   });
 
   test("GET /customers/:id — returns single customer (readonly)", async () => {
@@ -392,7 +396,7 @@ describe("Customers CRUD", () => {
     expect(res.json()).toMatchObject({ id: "cust-001" });
 
     const call = queryCalls.find((c) => c.sql.includes("FROM customers WHERE id"));
-    expect(call!.opts).toEqual({ readonly: true });
+    expect(call!.pool).toBe("replica");
   });
 
   test("GET /customers/:id — 404 when not found", async () => {
@@ -473,7 +477,7 @@ describe("Orders CRUD", () => {
     expect(res.json()).toMatchObject({ id: "ord-001", status: "pending" });
 
     // Verify transaction was used
-    expect(mockWithPrimaryClient).toHaveBeenCalledTimes(1);
+    expect(primaryMock.connect).toHaveBeenCalledTimes(1);
 
     // Verify BEGIN / INSERT orders / INSERT order_items / COMMIT sequence
     const txSqls = transactionCalls.map((c) => c.sql);
@@ -495,7 +499,7 @@ describe("Orders CRUD", () => {
     expect(res.json()).toEqual([ORDER]);
 
     const call = queryCalls.find((c) => c.sql.includes("SELECT * FROM orders ORDER BY"));
-    expect(call!.opts).toEqual({ readonly: true });
+    expect(call!.pool).toBe("replica");
   });
 
   test("GET /orders/:id — returns order with items (readonly)", async () => {
@@ -515,8 +519,8 @@ describe("Orders CRUD", () => {
     // Both queries should be readonly
     const orderQuery = queryCalls.find((c) => c.sql.includes("FROM orders WHERE id"));
     const itemsQuery = queryCalls.find((c) => c.sql.includes("FROM order_items WHERE order_id"));
-    expect(orderQuery!.opts).toEqual({ readonly: true });
-    expect(itemsQuery!.opts).toEqual({ readonly: true });
+    expect(orderQuery!.pool).toBe("replica");
+    expect(itemsQuery!.pool).toBe("replica");
   });
 
   test("GET /orders/:id — 404 when not found", async () => {
@@ -547,7 +551,7 @@ describe("Orders CRUD", () => {
 
     const updateCall = queryCalls.find((c) => c.sql.includes("UPDATE orders SET status"));
     expect(updateCall).toBeDefined();
-    expect(updateCall!.opts?.readonly).toBeUndefined();
+    expect(updateCall!.pool).toBe("primary");
   });
 
   test("PATCH /orders/:id — 404 when not found", async () => {
@@ -580,7 +584,7 @@ describe("Read-write routing", () => {
     const readCalls = queryCalls.filter((c) => c.sql.startsWith("SELECT"));
     expect(readCalls.length).toBeGreaterThanOrEqual(5);
     for (const call of readCalls) {
-      expect(call.opts).toEqual({ readonly: true });
+      expect(call.pool).toBe("replica");
     }
   });
 
@@ -613,7 +617,7 @@ describe("Read-write routing", () => {
     );
     expect(writeCalls.length).toBe(3);
     for (const call of writeCalls) {
-      expect(call.opts?.readonly).toBeUndefined();
+      expect(call.pool).toBe("primary");
     }
   });
 
@@ -635,7 +639,7 @@ describe("Read-write routing", () => {
     });
 
     // Order creation should go through withPrimaryClient, not mockQuery
-    expect(mockWithPrimaryClient).toHaveBeenCalledTimes(1);
+    expect(primaryMock.connect).toHaveBeenCalledTimes(1);
     const directInserts = queryCalls.filter((c) => c.sql.includes("INSERT INTO orders"));
     expect(directInserts).toHaveLength(0);
   });
